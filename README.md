@@ -25,22 +25,22 @@ The **GitOps Configuration Manager** is a production-grade DevOps platform that 
 
 > **The core loop:** `git push` → ArgoCD detects change → cluster syncs automatically → notifications fire → dashboard updates.
 
-### ✅ What This Project Demonstrates
+###  What This Project Demonstrates
 
 | Capability | Status |
 |---|---|
-| Git commit → automatic Kubernetes deployment | ✅ Complete |
-| Drift detection & self-healing | ✅ Complete |
-| Helm-based multi-environment deployments | ✅ Complete |
-| RBAC with dev / staging / prod isolation | ✅ Complete |
-| Slack / Discord notifications on OutOfSync | ✅ Complete |
-| React dashboard with live health & sync status | ✅ Complete |
-| Secrets management via Sealed Secrets | ✅ Complete |
-| Cluster recovery from scratch in < 30 minutes | ✅ Complete |
+| Git commit → automatic Kubernetes deployment |  Complete |
+| Drift detection & self-healing |  Complete |
+| Helm-based multi-environment deployments |  Complete |
+| RBAC with dev / staging / prod isolation |  Complete |
+| Slack / Discord notifications on OutOfSync |  Complete |
+| React dashboard with live health & sync status |  Complete |
+| Secrets management via Sealed Secrets |  Complete |
+| Cluster recovery from scratch in < 30 minutes |  Complete |
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 [ Developer ]  →  git push  →  [ GitHub Repo ]
@@ -65,7 +65,7 @@ The **GitOps Configuration Manager** is a production-grade DevOps platform that 
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 | Category | Technology | Purpose |
 |---|---|---|
@@ -81,7 +81,7 @@ The **GitOps Configuration Manager** is a production-grade DevOps platform that 
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 gitops-config-manager/
@@ -125,7 +125,7 @@ gitops-config-manager/
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 
@@ -216,9 +216,9 @@ From this point, **any `git push` to the configured path auto-deploys to the clu
 
 ---
 
-## ✨ Features
+##  Features
 
-### 🔄 Self-Healing & Drift Detection
+###  Self-Healing & Drift Detection
 
 With `selfHeal: true`, ArgoCD restores the cluster to the desired Git state automatically if anyone manually modifies resources.
 
@@ -231,7 +231,7 @@ kubectl delete deployment hello-world -n default
 # Watch ArgoCD detect and self-heal (within seconds)
 watch kubectl get pods -n default
 # → ArgoCD recreates the deployment automatically
-# → UI shows: OutOfSync → Syncing → Synced ✅
+# → UI shows: OutOfSync → Syncing → Synced 
 ```
 
 ### 📦 Helm Chart Deployments
@@ -244,7 +244,7 @@ All applications are packaged as Helm charts with environment-specific value ove
 | `staging` | 2 | 250m | `rc-1.2.0` |
 | `prod` | 3 | 500m | `1.2.0` (pinned) |
 
-### 🔔 Notifications
+###  Notifications
 
 ArgoCD sends Slack / Discord alerts when applications go `OutOfSync` or `Degraded`:
 
@@ -255,7 +255,7 @@ trigger.on-sync-failed: |
     send: [app-sync-failed]
 ```
 
-### 🔐 Secrets Management
+###  Secrets Management
 
 Secrets are **never committed to Git in plaintext.** The project uses Sealed Secrets (Bitnami):
 
@@ -271,7 +271,7 @@ git add sealed-db-credentials.yaml && git push
 
 Only the in-cluster Sealed Secrets controller can decrypt it.
 
-### 🛡️ RBAC Configuration
+###  RBAC Configuration
 
 ArgoCD projects provide RBAC boundaries preventing dev teams from deploying directly to production:
 
@@ -284,7 +284,7 @@ p, role:platform-eng,   applications, *,    */*, allow
 
 ---
 
-## 📊 Dashboard
+##  Dashboard
 
 The React dashboard queries the ArgoCD REST API to display real-time deployment status.
 
@@ -309,7 +309,7 @@ npm run dev
 
 ---
 
-## 📋 Runbooks
+##  Runbooks
 
 ### Manual Sync
 
@@ -346,7 +346,7 @@ kubectl apply -n argocd -f \
 # 3. Re-apply all ArgoCD Applications from Git
 kubectl apply -f apps/ -n argocd
 
-# ArgoCD restores the entire cluster state from Git automatically ✅
+# ArgoCD restores the entire cluster state from Git automatically 
 ```
 
 > **GitOps recovery story:** Because Git is the single source of truth, a complete cluster failure is recoverable in minutes — no state is lost.
@@ -381,7 +381,7 @@ PRs merge to `main` for dev → a git tag triggers staging sync → a manual app
 
 ---
 
-## 📄 License
+##  License
 
 This project is open source and available under the [MIT License](LICENSE).
 
