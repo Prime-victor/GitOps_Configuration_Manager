@@ -10,6 +10,7 @@
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![GitHub Actions](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/)
+![CI](https://github.com/Prime-victor/gitops-config-manager/actions/workflows/infra-ci.yml/badge.svg)
 
 *A fully automated GitOps pipeline where every Git commit is the single source of truth for cluster state.*
 
