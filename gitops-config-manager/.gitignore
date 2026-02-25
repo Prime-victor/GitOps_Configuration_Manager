@@ -1,0 +1,16 @@
+# Node
+dashboard/node_modules/
+dashboard/dist/
+
+# Environment secrets (never commit real .env files)
+.env
+.env.local
+dashboard/.env.local
+
+# OS
+.DS_Store
+*.swp
+
+# Helm cache
+charts/*/charts/
+*.tgz
