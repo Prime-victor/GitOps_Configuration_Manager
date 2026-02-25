@@ -1,0 +1,29 @@
+# argocd/argocd-cmd-params-cm.yaml
+# Controls argocd-server startup flags.
+# Separating these from argocd-cm keeps concerns clear:
+# argocd-cm = application behavior, this file = server process behavior.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cmd-params-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cmd-params-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Run server without TLS termination at the pod level.
+  # In production, TLS is terminated at the ingress/load balancer layer.
+  # For local dev with port-forward this is fine; for production clusters
+  # use a proper ingress with cert-manager.
+  server.insecure: "true"
+
+  # Enable the metrics server so Prometheus can scrape ArgoCD metrics.
+  # Even if you don't have Prometheus yet, set this now — adding it later
+  # requires a pod restart which disrupts ongoing syncs.
+  server.metrics.port: "8083"
+
+  # Log level: info in prod, debug only when troubleshooting.
+  # Debug logs are very verbose and will fill your log aggregator quickly.
+  server.log.level: "info"
+  server.log.format: "json"

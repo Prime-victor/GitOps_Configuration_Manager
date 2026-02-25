@@ -1,0 +1,38 @@
+# argocd/argocd-cm.yaml
+# Core ArgoCD configuration.
+# This ConfigMap controls global ArgoCD behavior — repo polling intervals,
+# UI settings, OIDC integration points, and resource tracking method.
+# Changes here require an argocd-server pod restart to take effect.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # How ArgoCD tracks which resources belong to which Application.
+  # "annotation" is preferred over "label" in production because it doesn't
+  # pollute resource labels and avoids conflicts with existing label selectors.
+  application.resourceTrackingMethod: annotation
+
+  # Poll Git repos every 3 minutes for changes.
+  # In production, supplement this with webhooks (Phase 4) to get near-instant syncs.
+  # Lower values increase Git API load; 3 minutes is a good balance.
+  timeout.reconciliation: 180s
+
+  # Allow ArgoCD to manage resources in any namespace, not just argocd.
+  # Required for deploying apps to default, staging, prod namespaces.
+  application.namespaceEnabled: "true"
+
+  # UI customization
+  ui.bannercontent: "GitOps Configuration Manager — Portfolio Platform"
+  ui.bannerurl: "https://github.com/Prime-victor/GitOps_Configuration_Manager"
+
+  # Repositories this ArgoCD instance is allowed to source from.
+  # Add your actual GitHub repo URL here.
+  repositories: |
+    - url: https://github.com/Prime-victor/GitOps_Configuration_Manager
+      name: gitops-config-manager
