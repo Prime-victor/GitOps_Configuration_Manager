@@ -1,0 +1,129 @@
+# Defines the AppProject for our platform.
+# Think of AppProject as a "tenant boundary" — it scopes what ArgoCD
+# Applications within this project are allowed to do.
+# Reference: https://argo-cd.readthedocs.io/en/stable/user-guide/projects/
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gitops-platform
+  namespace: argocd
+  # Finalizer prevents accidental deletion of the project while apps exist within it.
+  # ArgoCD will refuse to delete this project if any Applications reference it.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: "GitOps Configuration Manager — main platform project"
+
+  # Which Git repositories are permitted as sources.
+  # Wildcards are supported but use exact URLs in production.
+  sourceRepos:
+    - "https://github.com/Prime-victor/GitOps_Configuration_Manager.git"
+    # Helm chart repositories (add as needed)
+    - "https://charts.bitnami.com/bitnami"
+
+  # Which clusters and namespaces this project can deploy to.
+  # 'https://kubernetes.default.svc' = the cluster ArgoCD itself runs in.
+  # In a multi-cluster setup you'd list additional cluster API server URLs here.
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "dev"
+    - server: https://kubernetes.default.svc
+      namespace: "staging"
+    - server: https://kubernetes.default.svc
+      namespace: "prod"
+    - server: https://kubernetes.default.svc
+      namespace: "argocd"
+
+  # Cluster-scoped resources this project is allowed to manage.
+  # Being explicit here prevents runaway Applications from creating
+  # ClusterRoles, PersistentVolumes, or other cluster-wide resources.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRole
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRoleBinding
+
+  # Namespace-scoped resources this project can manage.
+  # Everything commonly needed for a web application workload.
+  namespaceResourceWhitelist:
+    - group: "apps"
+      kind: Deployment
+    - group: "apps"
+      kind: StatefulSet
+    - group: "apps"
+      kind: DaemonSet
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Secret
+    - group: ""
+      kind: ServiceAccount
+    - group: "networking.k8s.io"
+      kind: Ingress
+    - group: "batch"
+      kind: Job
+    - group: "batch"
+      kind: CronJob
+    - group: "autoscaling"
+      kind: HorizontalPodAutoscaler
+    - group: "bitnami.com"
+      kind: SealedSecret
+
+  # Roles define what ArgoCD users/groups can do within this project.
+  # These map to JWT claims from your SSO provider or ArgoCD local accounts.
+  roles:
+    # Platform engineers have full control within the project.
+    - name: platform-engineer
+      description: "Full access to all environments"
+      policies:
+        - p, proj:gitops-platform:platform-engineer, applications, *, gitops-platform/*, allow
+        - p, proj:gitops-platform:platform-engineer, repositories, *, *, allow
+      groups:
+        - platform-team
+
+    # Dev team can deploy to dev, read staging, cannot touch prod.
+    - name: developer
+      description: "Deploy to dev, read-only on staging, no prod access"
+      policies:
+        - p, proj:gitops-platform:developer, applications, get, gitops-platform/*, allow
+        - p, proj:gitops-platform:developer, applications, sync, gitops-platform/dev-*, allow
+        - p, proj:gitops-platform:developer, applications, create, gitops-platform/dev-*, allow
+        - p, proj:gitops-platform:developer, applications, update, gitops-platform/dev-*, allow
+        - p, proj:gitops-platform:developer, applications, delete, gitops-platform/dev-*, allow
+      groups:
+        - dev-team
+
+    # Read-only role for auditors, QA, and stakeholders.
+    - name: viewer
+      description: "Read-only access across all environments"
+      policies:
+        - p, proj:gitops-platform:viewer, applications, get, gitops-platform/*, allow
+      groups:
+        - viewers
+
+  # Sync windows define when automated syncs are allowed.
+  # This is your change management control for production.
+  # Production only auto-syncs during business hours, Monday-Friday.
+  # Emergency syncs can be manually triggered at any time.
+  syncWindows:
+    # ALLOW window: prod auto-syncs are permitted Mon-Fri, 09:00-17:00 UTC
+    - kind: allow
+      schedule: "0 9 * * 1-5"      # cron: 9am Monday-Friday
+      duration: 8h
+      applications:
+        - "prod-*"
+      namespaces:
+        - prod
+      manualSync: true              # manual sync always allowed even outside window
+    # DENY window: block automated prod syncs on weekends entirely
+    - kind: deny
+      schedule: "0 0 * * 6,0"      # cron: midnight Saturday and Sunday
+      duration: 48h
+      applications:
+        - "prod-*"
+      manualSync: false             # even manual syncs blocked — forces change process
