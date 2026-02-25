@@ -1,0 +1,57 @@
+# argocd/rbac/argocd-rbac-cm.yaml
+# Global ArgoCD RBAC policy.
+# This ConfigMap defines what built-in ArgoCD roles can do system-wide.
+# Project-level roles (defined in AppProject) layer on top of these.
+#
+# Policy format: p, <subject>, <resource>, <action>, <object>, <allow|deny>
+# Group format:  g, <group-name>, <role-name>
+#
+# Built-in roles:
+#   role:readonly  — read-only access to everything
+#   role:admin     — full access to everything
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-rbac-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Default policy applied to all authenticated users who don't match any group.
+  # 'role:readonly' means anyone logged in can see apps but cannot change anything.
+  # This is the correct production default — explicit grant, not implicit allow.
+  policy.default: role:readonly
+
+  policy.csv: |
+    # ── Platform Engineers ────────────────────────────────────────────────────
+    # Full system-level access: can manage clusters, repos, and all applications.
+    p, role:platform-eng, applications,  *,       */*, allow
+    p, role:platform-eng, clusters,      get,     *,   allow
+    p, role:platform-eng, repositories,  *,       *,   allow
+    p, role:platform-eng, accounts,      *,       *,   allow
+    p, role:platform-eng, certificates,  *,       *,   allow
+    p, role:platform-eng, gpgkeys,       *,       *,   allow
+
+    # ── Dev Team ──────────────────────────────────────────────────────────────
+    # Can deploy to dev environment only. Read access to staging for debugging.
+    p, role:dev-team, applications, get,    */*, allow
+    p, role:dev-team, applications, sync,   */dev-*, allow
+    p, role:dev-team, applications, create, */dev-*, allow
+    p, role:dev-team, applications, update, */dev-*, allow
+    p, role:dev-team, applications, delete, */dev-*, allow
+    p, role:dev-team, logs,         get,    *,      allow
+
+    # ── Group → Role Mappings ─────────────────────────────────────────────────
+    # These map SSO groups (or ArgoCD local groups) to the roles above.
+    # In a real org, 'platform-team' and 'dev-team' come from your IdP (Okta, Azure AD).
+    g, platform-team, role:platform-eng
+    g, dev-team,      role:dev-team
+
+    # The admin account retains full access regardless of the above.
+    g, admin,         role:admin
+
+  # Use scopes from your OIDC provider's JWT token to determine group membership.
+  # 'groups' is standard for most providers. 'email' is the fallback for local accounts.
+  scopes: "[groups, email]"
