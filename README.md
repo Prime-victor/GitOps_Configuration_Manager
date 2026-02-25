@@ -354,7 +354,7 @@ kubectl apply -f apps/ -n argocd
 
 ---
 
-## ❓ FAQ / Interview Notes
+##  FAQ 
 
 **Why ArgoCD over Flux?**
 ArgoCD provides a richer UI, Application-level abstractions, and stronger RBAC. Flux has simpler YAML but less visibility. Both are CNCF graduated — choice depends on team workflow.
@@ -370,7 +370,7 @@ PRs merge to `main` for dev → a git tag triggers staging sync → a manual app
 
 ---
 
-## 📸 Recommended Screenshots
+##  Recommended Screenshots
 
 - ArgoCD UI with all applications `Synced` and `Healthy`
 - Application mid-sync showing the `Syncing` state

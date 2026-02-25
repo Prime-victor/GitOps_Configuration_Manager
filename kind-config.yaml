@@ -1,0 +1,35 @@
+# Purpose: Define a local Kubernetes cluster that mirrors production topology.
+# We use a single control-plane node with ingress port mappings so ArgoCD UI,
+# the dashboard, and deployed apps are all accessible from localhost.
+# In a real environment this would be replaced by EKS/GKE cluster config.
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+
+name: gitops-demo
+
+nodes:
+  - role: control-plane
+    # These patches configure kubelet to accept the ingress-ready label,
+    # which is required by the NGINX ingress controller to bind to this node.
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    # Map host ports to container ports so services are reachable from localhost.
+    # Port 80  → HTTP ingress
+    # Port 443 → HTTPS ingress (ArgoCD UI uses TLS)
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+
+  # Worker nodes simulate a real multi-node topology.
+  # ArgoCD and application workloads will schedule here, not on control-plane.
+  - role: worker
+  - role: worker
