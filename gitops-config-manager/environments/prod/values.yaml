@@ -1,0 +1,42 @@
+# Production: full HA, pinned image tags, aggressive PDB, conservative HPA scale-down.
+# In a real setup, the image tag here is updated by your CI pipeline via a PR,
+# not by hand. The tag in this file is what's running in production right now.
+
+replicaCount: 3
+minReplicas: 3
+maxReplicas: 20
+
+image:
+  tag: "1.25.3-alpine"    # PINNED — never 'latest', never 'stable'
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/rate-limit: "100"          # 100 req/s per IP
+    nginx.ingress.kubernetes.io/rate-limit-burst-multiplier: "5"
+  hosts:
+    - host: hello-world.prod.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+config:
+  environment: "production"
+  logLevel: "warn"           # warn only in prod — reduce log volume and cost
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2            # always keep 2 of 3 replicas available
+
+autoscaling:
+  enabled: true
+  targetCPUUtilizationPercentage: 60    # scale earlier in prod — don't wait for saturation
