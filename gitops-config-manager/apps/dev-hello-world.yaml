@@ -1,0 +1,136 @@
+# ArgoCD Application for the hello-world chart in the dev environment.
+# An Application is ArgoCD's fundamental unit of management.
+# It answers three questions:
+#   1. WHERE is the desired state? (source)
+#   2. WHERE should it be applied? (destination)
+#   3. HOW should it be synced? (syncPolicy)
+# This manifest itself is stored in Git and managed by the App-of-Apps
+# root application we'll create in Phase 9. Changing this file = PR + review.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-hello-world
+  namespace: argocd
+
+  # Labels enable filtering in the ArgoCD UI and CLI.
+  # 'argocd app list -l environment=dev' returns only dev apps.
+  labels:
+    environment: dev
+    team: platform
+    app: hello-world
+
+  # The resources-finalizer is critical.
+  # Without it: deleting this Application manifest leaves all the Kubernetes
+  # resources (Deployments, Services, etc.) orphaned in the cluster forever.
+  # With it: ArgoCD cascades the delete — removes all managed resources first,
+  # then removes the Application object. This is almost always what you want.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+
+  annotations:
+    # Document the purpose and owner in annotations — searchable in the UI
+    argocd.argoproj.io/sync-wave: "1"   # sync order within a wave (Phase 9)
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: "platform-alerts"
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: "platform-alerts"
+
+spec:
+  # Must match an AppProject name. Restricts what this app can do.
+  # 'default' project has no restrictions — always use a named project.
+  project: gitops-platform
+
+  source:
+    repoURL: https://github.com/Prime-victor/GitOps_Configuration_Manager
+
+    # Which Git ref to track. 'HEAD' = latest commit on the default branch.
+    # In production, you should pin this to a specific branch per environment:
+    #   dev: HEAD (always latest)
+    #   staging: release branch
+    #   prod: tagged commit
+    targetRevision: HEAD
+
+    # Path within the repo to the Helm chart directory.
+    path: charts/hello-world
+
+    helm:
+      # Release name used by Helm. Appears in resource names via {{ .Release.Name }}.
+      releaseName: hello-world
+
+      # Value files to apply, relative to the chart's path.
+      # ArgoCD merges these in order — later files override earlier ones.
+      # We go from base → environment-specific.
+      valueFiles:
+        - values.yaml                              # base values (in charts/hello-world/)
+        - ../../environments/dev/values.yaml       # dev overrides
+
+      # Inline value overrides — useful for values that can't live in files
+      # (e.g., values generated at sync time, or secrets references).
+      # Keep this empty where possible — values in files are reviewable in Git.
+      values: ""
+
+  destination:
+    # The cluster to deploy to. 'kubernetes.default.svc' = in-cluster.
+    # For remote clusters, this would be the cluster's API server URL.
+    server: https://kubernetes.default.svc
+    namespace: dev
+
+  syncPolicy:
+    automated:
+      # prune: true means ArgoCD will DELETE resources that exist in the cluster
+      # but are NOT in Git. This is essential for true GitOps — Git is additive
+      # AND subtractive. Without prune, deleted manifests leave zombie resources.
+      prune: true
+
+      # selfHeal: true means if someone manually changes a resource (kubectl edit,
+      # kubectl scale, etc.), ArgoCD will revert it to the Git state within seconds.
+      # This is the self-healing guarantee. Disable it only if you have a specific
+      # reason to allow manual overrides (you almost never do).
+      selfHeal: true
+
+      # allowEmpty: false prevents ArgoCD from syncing an empty application
+      # (e.g., if your chart accidentally renders no resources). Safety net.
+      allowEmpty: false
+
+    syncOptions:
+      # Create the namespace if it doesn't exist yet.
+      # Without this, syncing to a non-existent namespace fails.
+      - CreateNamespace=true
+
+      # Before applying new resources, validate them against the Kubernetes API server.
+      # Catches schema violations before they cause partial applies.
+      - Validate=true
+
+      # Use server-side apply instead of client-side apply.
+      # SSA handles field ownership correctly and avoids annotation bloat.
+      # Recommended for all production installations.
+      - ServerSideApply=true
+
+      # When pruning, respect PodDisruptionBudgets.
+      # Won't delete a pod if it would violate the PDB.
+      - RespectIgnoreDifferences=true
+
+    # Retry policy: if a sync fails, retry with exponential backoff.
+    # This handles transient errors (network blip, webhook timeout, etc.)
+    # without paging the on-call engineer at 2am for a 5-second outage.
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2          # 5s, 10s, 20s, 40s, 80s
+        maxDuration: 3m
+
+  # ignoreDifferences: tell ArgoCD to ignore certain fields when calculating diff.
+  # Some controllers (HPA, admission webhooks) mutate resources after apply.
+  # Without this, ArgoCD sees their changes as drift and syncs endlessly.
+  ignoreDifferences:
+    # HPA sets replicas on the Deployment spec — ignore it or ArgoCD fights the HPA
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+
+    # Webhooks inject caBundle values — ignore these auto-populated fields
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jsonPointers:
+        - /webhooks/0/clientConfig/caBundle
