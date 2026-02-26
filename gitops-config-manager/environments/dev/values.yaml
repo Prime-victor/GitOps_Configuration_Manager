@@ -31,4 +31,4 @@ podDisruptionBudget:
   enabled: false             # no PDB in dev — we only have 1 replica anyway
 
 autoscaling:
-  enabled: false             # no HPA in dev — save cluster resources
+  enabled: false             # no HPA in dev — save cluster resources# Testing secure webhook with secret
