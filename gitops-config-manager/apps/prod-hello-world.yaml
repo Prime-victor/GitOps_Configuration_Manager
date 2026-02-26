@@ -1,0 +1,71 @@
+# Production Application.
+# Key differences from dev/staging:
+# - automated.selfHeal: true but NO automated prune (require manual approval for deletes)
+# - Sync windows enforced via AppProject (Phase 2) — auto-sync blocked on weekends
+# - More conservative retry: fewer attempts, longer backoff
+# - ignoreDifferences is more thorough (prod has more webhook mutations)
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prod-hello-world
+  namespace: argocd
+  labels:
+    environment: prod
+    team: platform
+    app: hello-world
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    # Production alerts go to a dedicated channel — higher urgency
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: "prod-incidents"
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: "prod-incidents"
+    notifications.argoproj.io/subscribe.on-deployed.slack: "prod-deployments"
+
+spec:
+  project: gitops-platform
+
+  source:
+    repoURL: https://github.com/Prime-victor/GitOps_Configuration_Manager
+    # Production tracks a specific branch, not HEAD.
+    # 'release' branch is only updated via tagged PRs from 'main'.
+    # This gives you an explicit promotion gate: merge to release = deploy to prod.
+    targetRevision: release
+    path: charts/hello-world
+    helm:
+      releaseName: hello-world
+      valueFiles:
+        - values.yaml
+        - ../../environments/prod/values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod
+
+  syncPolicy:
+    automated:
+      prune: false           # NEVER auto-prune in prod — require human approval for deletes
+      selfHeal: true         # self-heal drift, but don't auto-delete resources
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - Validate=true
+      - ServerSideApply=true
+      - PruneLast=true       # if pruning is manually triggered, do it AFTER all creates/updates
+    retry:
+      limit: 2               # fewer retries in prod — failures need human eyes sooner
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m
+
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+      jqPathExpressions:
+        - .spec.metrics
