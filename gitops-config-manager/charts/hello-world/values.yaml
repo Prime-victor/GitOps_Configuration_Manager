@@ -1,0 +1,219 @@
+# charts/hello-world/values.yaml
+# Base values for the hello-world chart.
+# These represent PRODUCTION-SAFE defaults.
+# Environment overrides in environments/<env>/values.yaml selectively
+# override only what differs — everything else inherits from here.
+#
+# Convention: if a value is environment-specific, set a conservative default here
+# and override upward (more replicas, more memory) in staging/prod.
+
+# ── Replica Configuration ─────────────────────────────────────────────────────
+replicaCount: 2
+# Minimum replicas for HPA to scale down to (must be <= replicaCount)
+minReplicas: 2
+# Maximum replicas HPA can scale up to
+maxReplicas: 10
+# CPU utilization percentage that triggers HPA scale-up
+targetCPUUtilizationPercentage: 70
+
+# ── Image Configuration ───────────────────────────────────────────────────────
+image:
+  repository: nginx
+  # NEVER use 'latest' in a values.yaml that reaches production.
+  # 'latest' is non-deterministic — two deployments of the same commit
+  # can run different code if the upstream image changed between pulls.
+  tag: "1.25.3-alpine"
+  pullPolicy: IfNotPresent
+
+# Image pull secrets for private registries (e.g., ECR, GCR, ACR)
+imagePullSecrets: []
+# - name: registry-credentials
+
+# ── Application Identity ──────────────────────────────────────────────────────
+nameOverride: ""
+fullnameOverride: ""
+
+# ── Service Account ───────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false  # deny by default — explicit opt-in per workload
+  annotations: {}
+  name: ""
+
+# ── Pod-Level Configuration ───────────────────────────────────────────────────
+podAnnotations:
+  # Prometheus scraping annotations — the Prometheus operator reads these
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9113"   # nginx-prometheus-exporter sidecar port
+  prometheus.io/path: "/metrics"
+
+podLabels: {}
+
+# ── Security Context (Pod Level) ─────────────────────────────────────────────
+# Pod security context applies to all containers in the pod.
+# Running as non-root is a CIS Kubernetes Benchmark requirement.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 101          # nginx official non-root user UID
+  runAsGroup: 101
+  fsGroup: 101
+  seccompProfile:
+    type: RuntimeDefault  # use the container runtime's default seccomp profile
+
+# ── Security Context (Container Level) ───────────────────────────────────────
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL              # drop ALL linux capabilities — nginx doesn't need any
+    add: []
+
+# ── Service Configuration ─────────────────────────────────────────────────────
+service:
+  type: ClusterIP         # ClusterIP in prod — expose via Ingress, not NodePort/LB
+  port: 80
+  targetPort: 8080        # nginx listens on 8080 when running as non-root (port <1024 requires root)
+  annotations: {}
+
+# ── Ingress Configuration ─────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"    # true in prod with cert-manager
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: hello-world.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # In prod with cert-manager:
+  # tls:
+  #   - secretName: hello-world-tls
+  #     hosts:
+  #       - hello-world.example.com
+
+# ── Resource Requests and Limits ─────────────────────────────────────────────
+# Requests: what Kubernetes reserves on the node for this container
+# Limits: the hard ceiling — exceeding CPU limit = throttled, exceeding memory = OOMKilled
+#
+# Rule of thumb: set requests to your p50 usage, limits to your p99 usage.
+# Never set limits drastically higher than requests — it defeats bin-packing.
+resources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+  limits:
+    cpu: "200m"
+    memory: "256Mi"
+
+# ── Liveness Probe ───────────────────────────────────────────────────────────
+# If this fails repeatedly, Kubernetes RESTARTS the container.
+# Use for: detecting deadlocks, hung processes, unrecoverable states.
+# Do NOT use a heavy endpoint here — it runs every few seconds forever.
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 10   # give the app time to start before probing
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3       # 3 consecutive failures → restart
+  successThreshold: 1
+
+# ── Readiness Probe ──────────────────────────────────────────────────────────
+# If this fails, Kubernetes REMOVES the pod from the Service endpoints.
+# Traffic stops being routed to this pod — but it is NOT restarted.
+# Use for: signaling the app is temporarily unable to serve (loading config, warming cache).
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+  successThreshold: 1
+
+# ── Startup Probe ────────────────────────────────────────────────────────────
+# Only runs during initial container startup.
+# Disables liveness/readiness probes until this succeeds.
+# Use for: slow-starting apps (JVM warmup, large model loading, DB migrations).
+# NGINX starts fast so this threshold is generous but harmless.
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 0
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 12      # 12 * 5s = 60 seconds max startup time
+
+# ── Autoscaling ───────────────────────────────────────────────────────────────
+autoscaling:
+  enabled: true
+
+# ── Pod Disruption Budget ─────────────────────────────────────────────────────
+# Guarantees at least N pods remain available during voluntary disruptions
+# (node drain, rolling update, cluster upgrade).
+# Without this, a node drain could kill ALL your replicas simultaneously.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1           # at least 1 pod always running during disruptions
+
+# ── Node Scheduling ──────────────────────────────────────────────────────────
+nodeSelector: {}
+
+tolerations: []
+
+# Spread pods across nodes and zones to avoid single points of failure
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - hello-world
+          topologyKey: kubernetes.io/hostname
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+# Required because we set readOnlyRootFilesystem: true.
+# NGINX needs to write to /tmp, /var/cache/nginx, and /var/run.
+# We mount tmpfs (emptyDir) volumes for these paths.
+volumes:
+  - name: tmp
+    emptyDir: {}
+  - name: nginx-cache
+    emptyDir: {}
+  - name: nginx-run
+    emptyDir: {}
+  - name: nginx-config
+    configMap:
+      name: "{{ include \"hello-world.fullname\" . }}-nginx-config"
+
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+  - name: nginx-cache
+    mountPath: /var/cache/nginx
+  - name: nginx-run
+    mountPath: /var/run
+  - name: nginx-config
+    mountPath: /etc/nginx/conf.d
+    readOnly: true
+
+# ── Application Config ────────────────────────────────────────────────────────
+config:
+  environment: "production"
+  logLevel: "info"
+  # This gets rendered into a ConfigMap and mounted into the pod.
+  # Change values here → ArgoCD detects diff → rolling update with zero downtime.
+  nginxWorkerProcesses: "auto"
+  nginxWorkerConnections: "1024"

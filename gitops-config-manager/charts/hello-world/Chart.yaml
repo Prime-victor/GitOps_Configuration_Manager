@@ -1,0 +1,37 @@
+# charts/hello-world/Chart.yaml
+# Chart metadata. Every field here is meaningful:
+# - 'version' is the chart version — bump this when you change chart structure
+# - 'appVersion' is the version of the APPLICATION the chart deploys
+#   These two version independently: chart v1.2.0 might deploy appVersion 3.1.0
+# - 'type: application' means this chart deploys actual workloads (vs 'library' charts
+#   which only contain reusable templates with no deployable resources)
+
+apiVersion: v2
+name: hello-world
+description: |
+  Production-grade hello-world application chart.
+  Deploys an NGINX-based web server with full observability hooks,
+  environment-specific resource profiles, and security hardening.
+type: application
+version: 0.1.0
+appVersion: "1.25.3"
+
+#  in a real org this is your team's contact info(chart maintainers)
+maintainers:
+  - name: Platform Engineering
+    email: platform@yourcompany.com
+
+# Minimum Helm and Kubernetes versions this chart supports
+kubeVersion: ">=1.25.0"
+
+# Keywords help with chart repository discovery
+keywords:
+  - nginx
+  - hello-world
+  - gitops
+  - platform-demo
+
+# Annotations are freeform metadata — useful for CI tooling and audits
+annotations:
+  category: Application
+  licenses: MIT
