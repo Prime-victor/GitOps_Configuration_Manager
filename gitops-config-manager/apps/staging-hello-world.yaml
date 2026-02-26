@@ -1,0 +1,60 @@
+# Staging environment Application.
+# Identical structure to dev but with:
+# - Different namespace and name
+# - Staging value override file
+# - More conservative retry policy (staging issues need investigation, not blind retry)
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: staging-hello-world
+  namespace: argocd
+  labels:
+    environment: staging
+    team: platform
+    app: hello-world
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: "platform-alerts"
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: "platform-alerts"
+
+spec:
+  project: gitops-platform
+
+  source:
+    repoURL: https://github.com/Prime-victor/GitOps_Configuration_Manager
+    targetRevision: HEAD
+    path: charts/hello-world
+    helm:
+      releaseName: hello-world
+      valueFiles:
+        - values.yaml
+        - ../../environments/staging/values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - Validate=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
