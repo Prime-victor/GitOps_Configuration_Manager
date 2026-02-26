@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hello-world.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hello-world.labels" . | nindent 4 }}
+  annotations:
+    # Record the chart version that created this deployment — useful in audits
+    deployment.kubernetes.io/chart-version: {{ .Chart.Version | quote }}
+spec:
+  # Only set replicas if HPA is disabled.
+  # When HPA is enabled, it owns the replica count. If you also set it in
+  # the Deployment spec, you get a control loop conflict on every sync.
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+
+  selector:
+    matchLabels:
+      {{- include "hello-world.selectorLabels" . | nindent 6 }}
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # At most 1 pod above desired count during rollout (controls speed)
+      maxSurge: 1
+      # At most 0 pods unavailable during rollout (zero-downtime requirement)
+      maxUnavailable: 0
+
+  template:
+    metadata:
+      # Annotations on the pod template trigger a rolling restart when they change.
+      # We include a checksum of the ConfigMap so that config changes
+      # automatically roll pods — without this, a config change won't restart pods.
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "hello-world.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      serviceAccountName: {{ include "hello-world.serviceAccountName" . }}
+
+      # Security context at the pod level
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+
+      # Ensure pods are spread across nodes for HA
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      # Graceful shutdown: give the app 30s to finish in-flight requests
+      # before Kubernetes sends SIGKILL. Must be > your longest request timeout.
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          # Security context at the container level (more granular than pod level)
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # Probes are critical. Without them:
+          # - Traffic gets routed to pods that aren't ready yet
+          # - Broken pods never get restarted
+          # - Rolling updates complete before the app is actually healthy
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          env:
+            - name: ENVIRONMENT
+              value: {{ .Values.config.environment | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            # Expose pod identity to the app via downward API.
+            # Useful for logging, tracing, and debugging — app knows its own pod name.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+
+          volumeMounts:
+            {{- toYaml .Values.volumeMounts | nindent 12 }}
+
+      volumes:
+        {{- toYaml .Values.volumes | nindent 8 }}
