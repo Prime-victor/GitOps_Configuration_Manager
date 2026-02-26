@@ -1,0 +1,73 @@
+# NGINX configuration mounted into the pod.
+# We manage NGINX config through Helm values → ConfigMap → volume mount.
+# This means a config change is a git commit → ArgoCD sync → rolling pod restart.
+# Zero manual kubectl edits required.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hello-world.fullname" . }}-nginx-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hello-world.labels" . | nindent 4 }}
+data:
+  default.conf: |
+    server {
+        listen 8080;               # non-root: can't bind to 80
+        listen [::]:8080;
+        server_name _;
+
+        # Access logs in JSON for structured log aggregation (Loki, Splunk, Datadog)
+        log_format json_combined escape=json
+          '{'
+            '"time":"$time_iso8601",'
+            '"remote_addr":"$remote_addr",'
+            '"method":"$request_method",'
+            '"uri":"$request_uri",'
+            '"status":"$status",'
+            '"bytes_sent":"$bytes_sent",'
+            '"request_time":"$request_time",'
+            '"user_agent":"$http_user_agent"'
+          '}';
+        access_log /dev/stdout json_combined;
+        error_log  /dev/stderr warn;
+
+        # Security headers — required for any production workload
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+        # Health check endpoints used by Kubernetes probes.
+        # These must be lightweight — no auth, no DB calls, no business logic.
+        location /healthz {
+            access_log off;        # don't pollute logs with probe noise
+            return 200 '{"status":"ok","service":"hello-world"}';
+            add_header Content-Type application/json;
+        }
+
+        location /ready {
+            access_log off;
+            return 200 '{"status":"ready","environment":"{{ .Values.config.environment }}"}';
+            add_header Content-Type application/json;
+        }
+
+        # Main application location
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+            try_files $uri $uri/ /index.html;  # SPA fallback
+
+            # Cache static assets aggressively
+            location ~* \.(js|css|png|jpg|ico|woff2)$ {
+                expires 1y;
+                add_header Cache-Control "public, immutable";
+            }
+        }
+
+        # Block access to hidden files (.git, .env, etc)
+        location ~ /\. {
+            deny all;
+            access_log off;
+            log_not_found off;
+        }
+    }
