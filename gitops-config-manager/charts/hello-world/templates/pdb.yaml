@@ -1,0 +1,19 @@
+# Pod Disruption Budget — guarantees minimum availability during voluntary disruptions.
+# "Voluntary disruptions" = node drains, cluster upgrades, manual pod deletions.
+# Without a PDB, a node drain can kill ALL your pods at once if they all happen
+# to be on the same node. PDB prevents this.
+
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "hello-world.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hello-world.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "hello-world.selectorLabels" . | nindent 6 }}
+{{- end }}
