@@ -32,3 +32,4 @@ podDisruptionBudget:
 
 autoscaling:
   enabled: false             # no HPA in dev — save cluster resources# Testing secure webhook with secret
+# Testing webhook with stable connection
