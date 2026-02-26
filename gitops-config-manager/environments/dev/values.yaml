@@ -1,0 +1,34 @@
+# Dev environment: minimal resources, latest-ish tags, no HA requirements.
+# The goal in dev is fast iteration, not stability.
+
+replicaCount: 1
+minReplicas: 1
+maxReplicas: 3
+
+image:
+  tag: "1.25.3-alpine"    # still pin tags even in dev — 'latest' causes phantom diffs
+
+resources:
+  requests:
+    cpu: "25m"
+    memory: "32Mi"
+  limits:
+    cpu: "100m"
+    memory: "128Mi"
+
+ingress:
+  hosts:
+    - host: hello-world.dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+config:
+  environment: "development"
+  logLevel: "debug"          # verbose logging in dev — silence in prod
+
+podDisruptionBudget:
+  enabled: false             # no PDB in dev — we only have 1 replica anyway
+
+autoscaling:
+  enabled: false             # no HPA in dev — save cluster resources
