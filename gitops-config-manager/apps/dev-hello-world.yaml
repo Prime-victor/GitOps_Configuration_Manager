@@ -50,7 +50,7 @@ spec:
     targetRevision: HEAD
 
     # Path within the repo to the Helm chart directory.
-    path: charts/hello-world
+    path: gitops-config-manager/charts/hello-world
 
     helm:
       # Release name used by Helm. Appears in resource names via {{ .Release.Name }}.

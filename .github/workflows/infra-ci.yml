@@ -4,15 +4,15 @@ on:
   pull_request:
     branches: [ main, staging ]
     paths:
-      - 'charts/**'
-      - 'environments/**'
-      - 'apps/**'
-      - 'argocd/**'
+      - 'gitops-config-manager/charts/**'
+      - 'gitops-config-manager/environments/**'
+      - 'gitops-config-manager/apps/**'
+      - 'gitops-config-manager/argocd/**'
   push:
     branches: [ main ]
     paths:
-      - 'charts/**'
-      - 'environments/**'
+      - 'gitops-config-manager/charts/**'
+      - 'gitops-config-manager/environments/**'
 
 env:
   KUBE_VERSION: v1.28.0
@@ -33,7 +33,7 @@ jobs:
 
       - name: Lint Helm Charts
         run: |
-          for chart in charts/*/; do
+          for chart in gitops-config-manager/charts/*/; do
             echo "Linting $chart"
             helm lint $chart
           done
@@ -41,9 +41,9 @@ jobs:
       - name: Template Validation
         run: |
           # Test templating with different environments
-          helm template charts/hello-world/ --values environments/dev/values.yaml > /dev/null
-          helm template charts/hello-world/ --values environments/staging/values.yaml > /dev/null
-          helm template charts/hello-world/ --values environments/prod/values.yaml > /dev/null
+          helm template gitops-config-manager/charts/hello-world/ --values gitops-config-manager/environments/dev/values.yaml > /dev/null
+          helm template gitops-config-manager/charts/hello-world/ --values gitops-config-manager/environments/staging/values.yaml > /dev/null
+          helm template gitops-config-manager/charts/hello-world/ --values gitops-config-manager/environments/prod/values.yaml > /dev/null
 
   validate-manifests:
     name: Validate Kubernetes Manifests
@@ -60,7 +60,7 @@ jobs:
       - name: Validate ArgoCD Applications
         run: |
           # Basic YAML validation
-          for file in apps/*.yaml argocd/**/*.yaml; do
+          for file in gitops-config-manager/apps/*.yaml gitops-config-manager/argocd/**/*.yaml; do
             if [ -f "$file" ]; then
               echo "Validating $file"
               kubectl apply --dry-run=client -f "$file" || exit 1
@@ -85,8 +85,8 @@ jobs:
       - name: Install Helm Charts
         run: |
           # Install in CI cluster to verify
-          helm install test-release charts/hello-world/ \
-            --values environments/dev/values.yaml \
+          helm install test-release gitops-config-manager/charts/hello-world/ \
+            --values gitops-config-manager/environments/dev/values.yaml \
             --wait \
             --timeout 2m
 
@@ -110,7 +110,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'config'
-          scan-ref: './charts'
+          scan-ref: './gitops-config-manager/charts'
           format: 'table'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
@@ -151,7 +151,7 @@ jobs:
       - name: Test Policies
         run: |
           # Test generated manifests against policies
-          helm template charts/hello-world/ --values environments/prod/values.yaml | \
+          helm template gitops-config-manager/charts/hello-world/ --values gitops-config-manager/environments/prod/values.yaml | \
             conftest test --policy policy/ -
 
   notify-status:

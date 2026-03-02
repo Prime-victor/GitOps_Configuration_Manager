@@ -19,6 +19,7 @@ spec:
   # Wildcards are supported but use exact URLs in production.
   sourceRepos:
     - "https://github.com/Prime-victor/GitOps_Configuration_Manager.git"
+    - "https://github.com/Prime-victor/GitOps_Configuration_Manager"
     # Helm chart repositories (add as needed)
     - "https://charts.bitnami.com/bitnami"
 
@@ -71,6 +72,8 @@ spec:
       kind: CronJob
     - group: "autoscaling"
       kind: HorizontalPodAutoscaler
+    - group: "policy"
+      kind: PodDisruptionBudget
     - group: "bitnami.com"
       kind: SealedSecret
 

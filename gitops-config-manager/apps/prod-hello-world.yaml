@@ -32,7 +32,7 @@ spec:
     # 'release' branch is only updated via tagged PRs from 'main'.
     # This gives you an explicit promotion gate: merge to release = deploy to prod.
     targetRevision: release
-    path: charts/hello-world
+    path: gitops-config-manager/charts/hello-world
     helm:
       releaseName: hello-world
       valueFiles:
