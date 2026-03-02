@@ -1,0 +1,167 @@
+# ArgoCD Notifications configuration.
+# Structure:
+#   service.<name>        — defines a notification channel (Slack, Discord, email, etc.)
+#   template.<name>       — defines the message content for a notification
+#   trigger.<name>        — defines WHEN a notification fires (condition + template)
+#   defaultTriggers       — triggers that apply to all apps unless overridden
+#
+# Subscriptions are defined per-Application via annotations (see apps/ manifests).
+# This separation means: templates/triggers are platform config (here),
+# subscriptions are app config (in apps/*.yaml).
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+
+data:
+
+  # ── Notification Templates ─────────────────────────────────────────────────
+  # Templates define the message content.
+  # Available variables:
+  #   .app                    — the ArgoCD Application object
+  #   .app.metadata.name      — application name
+  #   .app.spec.source.repoURL
+  #   .app.spec.source.targetRevision
+  #   .app.status.sync.status — Synced | OutOfSync | Unknown
+  #   .app.status.health.status — Healthy | Progressing | Degraded | Missing
+  #   .app.status.operationState.message — sync error message
+  #   .app.status.summary.images — list of container images
+  #   .context                — custom context variables defined in trigger
+  # Discord uses a different payload format
+  template.discord-sync-failed: |
+    webhook:
+      discord:
+        method: POST
+        body: |
+          {
+            "username": "ArgoCD",
+            "avatar_url": "https://argo-cd.readthedocs.io/en/stable/assets/logo.png",
+            "embeds": [
+              {
+                "title": "Sync Failed: {{.app.metadata.name}}",
+                "color": 15158332,
+                "fields": [
+                  {
+                    "name": "Environment",
+                    "value": "{{index .app.metadata.labels "environment"}}",
+                    "inline": true
+                  },
+                  {
+                    "name": "Status",
+                    "value": "{{.app.status.sync.status}}",
+                    "inline": true
+                  },
+                  {
+                    "name": "Revision",
+                    "value": "`{{.app.status.sync.revision | substr 0 7}}`",
+                    "inline": true
+                  },
+                  {
+                    "name": "Error",
+                    "value": "```{{.app.status.operationState.message}}```",
+                    "inline": false
+                  }
+                ],
+                "url": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+                "timestamp": "{{.app.status.operationState.finishedAt}}"
+              }
+            ]
+          }
+
+  template.discord-health-degraded: |
+    webhook:
+      discord:
+        method: POST
+        body: |
+          {
+            "username": "ArgoCD",
+            "embeds": [
+              {
+                "title": "🔴 Health Degraded: {{.app.metadata.name}}",
+                "color": 15158332,
+                "fields": [
+                  {
+                    "name": "Environment",
+                    "value": "{{index .app.metadata.labels "environment"}}",
+                    "inline": true
+                  },
+                  {
+                    "name": "Health Status",
+                    "value": "{{.app.status.health.status}}",
+                    "inline": true
+                  },
+                  {
+                    "name": "Message",
+                    "value": "{{.app.status.health.message}}",
+                    "inline": false
+                  }
+                ],
+                "url": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}"
+              }
+            ]
+          }
+
+  # ── Trigger Definitions ────────────────────────────────────────────────────
+  # Triggers define WHEN to send a notification.
+  # Each trigger has:
+  #   - when: a Go template expression that evaluates to true/false
+  #   - send: list of template names to fire when condition is true
+  #   - oncePer: deduplicate — only fire once per this value change
+  #
+  # The 'when' expressions use the same variables as templates.
+  # Full expression reference:
+  # https://argo-cd.readthedocs.io/en/stable/operator-manual/notifications/triggers/
+
+  trigger.on-deployed: |
+    - description: Notify when application is successfully synced and healthy
+      when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+      oncePer: app.status.sync.revision
+      send:
+        - app-sync-succeeded
+
+  trigger.on-sync-failed: |
+    - description: Notify when application sync fails
+      when: app.status.operationState.phase in ['Error', 'Failed']
+      oncePer: app.status.operationState.syncResult.revision
+      send:
+        - app-sync-failed
+        - discord-sync-failed
+
+  trigger.on-health-degraded: |
+    - description: Notify when application health degrades
+      when: >-
+        app.status.health.status == 'Degraded' and
+        app.status.operationState != nil and
+        app.status.operationState.phase not in ['Running']
+      oncePer: app.status.health.status
+      send:
+        - app-health-degraded
+        - discord-health-degraded
+
+  trigger.on-sync-running: |
+    - description: Notify when a sync operation begins
+      when: app.status.operationState.phase in ['Running']
+      oncePer: app.status.operationState.startedAt
+      send:
+        - app-sync-running
+
+  trigger.on-out-of-sync: |
+    - description: Notify when application drifts from desired state
+      when: >-
+        app.status.sync.status == 'OutOfSync' and
+        app.status.operationState != nil and
+        app.status.operationState.phase not in ['Running']
+      oncePer: app.status.sync.revision
+      send:
+        - app-out-of-sync
+
+  # ── Context Variables ──────────────────────────────────────────────────────
+  # Context variables are available in all templates as .context.<key>
+  # Use these for values that are the same across all notifications
+  # but shouldn't be hardcoded in every template.
+  context: |
+    argocdUrl: https://localhost:8080
