@@ -11,23 +11,26 @@ metadata:
     {{- include "hello-world.labels" . | nindent 4 }}
 data:
   default.conf: |
+    # conf.d/*.conf files are included inside the http{} context.
+    # log_format is valid at this level, but not inside server{}.
+    log_format json_combined escape=json
+      '{'
+        '"time":"$time_iso8601",'
+        '"remote_addr":"$remote_addr",'
+        '"method":"$request_method",'
+        '"uri":"$request_uri",'
+        '"status":"$status",'
+        '"bytes_sent":"$bytes_sent",'
+        '"request_time":"$request_time",'
+        '"user_agent":"$http_user_agent"'
+      '}';
+
     server {
         listen 8080;               # non-root: can't bind to 80
         listen [::]:8080;
         server_name _;
 
         # Access logs in JSON for structured log aggregation (Loki, Splunk, Datadog)
-        log_format json_combined escape=json
-          '{'
-            '"time":"$time_iso8601",'
-            '"remote_addr":"$remote_addr",'
-            '"method":"$request_method",'
-            '"uri":"$request_uri",'
-            '"status":"$status",'
-            '"bytes_sent":"$bytes_sent",'
-            '"request_time":"$request_time",'
-            '"user_agent":"$http_user_agent"'
-          '}';
         access_log /dev/stdout json_combined;
         error_log  /dev/stderr warn;
 
