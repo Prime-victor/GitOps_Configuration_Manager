@@ -4,68 +4,238 @@
 # - Sync windows enforced via AppProject (Phase 2) — auto-sync blocked on weekends
 # - More conservative retry: fewer attempts, longer backoff
 # - ignoreDifferences is more thorough (prod has more webhook mutations)
+# - More aggressive alerting to dedicated production channels
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: prod-hello-world
   namespace: argocd
+  
   labels:
     environment: prod
     team: platform
     app: hello-world
+    tier: application
+    criticality: high
+    data-classification: confidential
+    managed-by: argocd
+    backup: required
+
+  # The resources-finalizer is critical for production.
+  # Ensures all resources are properly cleaned up when application is deleted.
   finalizers:
     - resources-finalizer.argocd.argoproj.io
+
   annotations:
+    # Sync wave - production deploys after dev and staging
     argocd.argoproj.io/sync-wave: "3"
-    # Production alerts go to a dedicated channel — higher urgency
-    notifications.argoproj.io/subscribe.on-sync-failed.slack: "prod-incidents"
-    notifications.argoproj.io/subscribe.on-health-degraded.slack: "prod-incidents"
-    notifications.argoproj.io/subscribe.on-deployed.slack: "prod-deployments"
+    argocd.argoproj.io/manifest-generate-paths: "."
+    
+    # Production alerts go to dedicated channels — higher urgency
+    
+    # Discord notifications - same pattern, all to production channel
+    notifications.argoproj.io/subscribe.on-sync-failed.webhook-discord: "prod"
+    notifications.argoproj.io/subscribe.on-sync-succeeded.webhook-discord: "prod"
+    notifications.argoproj.io/subscribe.on-sync-running.webhook-discord: "prod"
+    notifications.argoproj.io/subscribe.on-health-degraded.webhook-discord: "prod"
+    notifications.argoproj.io/subscribe.on-deployed.webhook-discord: "prod"
+    notifications.argoproj.io/subscribe.on-out-of-sync.webhook-discord: "prod"
+    notifications.argoproj.io/subscribe.on-sync-status-unknown.webhook-discord: "prod"
+    
+    # Additional production-specific metadata
+    pagerduty.com/severity: "critical"          # For PagerDuty integration
+    opsgenie.com/priority: "P1"                  # For OpsGenie integration
+    prometheus.io/scrape: "true"                  # Monitor this application
+    owner: "platform-team@company.com"           # Team contact email
+    runbook: "https://internal.wiki/runbooks/prod-hello-world"  # Incident runbook
 
 spec:
-  project: gitops-platform
+  # Must match an AppProject name. Production uses a restricted project.
+  project: gitops-platform-prod
 
   source:
     repoURL: https://github.com/Prime-victor/GitOps_Configuration_Manager
+    
     # Production tracks a specific branch, not HEAD.
     # 'release' branch is only updated via tagged PRs from 'main'.
     # This gives you an explicit promotion gate: merge to release = deploy to prod.
     targetRevision: release
+    
+    # Path within the repo to the Helm chart directory.
     path: gitops-config-manager/charts/hello-world
+    
     helm:
-      releaseName: hello-world
+      # Release name used by Helm. Appears in resource names via {{ .Release.Name }}.
+      releaseName: hello-world-prod
+
+      # Value files to apply, relative to the chart's path.
+      # ArgoCD merges these in order — later files override earlier ones.
       valueFiles:
-        - values.yaml
-        - ../../environments/prod/values.yaml
+        - values.yaml                              # base values (in charts/hello-world/)
+        - ../../environments/prod/values.yaml      # prod overrides
+
+      # Inline value overrides — should be empty for production
+      # Values should always come from Git in production
+      values: ""
+
+      # Additional Helm settings for production
+      skipCrds: false  # Set to true if you manage CRDs separately
+      ignoreMissingValueFiles: false  # Fail if value files are missing
+      
+      # Version of Helm to use (optional but recommended for consistency)
+      version: v3
 
   destination:
+    # The cluster to deploy to. 'kubernetes.default.svc' = in-cluster.
+    # For remote clusters, this would be the cluster's API server URL.
     server: https://kubernetes.default.svc
     namespace: prod
 
   syncPolicy:
     automated:
-      prune: false           # NEVER auto-prune in prod — require human approval for deletes
-      selfHeal: true         # self-heal drift, but don't auto-delete resources
+      # prune: false - NEVER auto-prune in prod — require human approval for deletes
+      # This is critical for production safety
+      prune: false
+      
+      # selfHeal: true - self-heal drift, but don't auto-delete resources
+      selfHeal: true
+      
+      # allowEmpty: false prevents empty syncs (safety net)
       allowEmpty: false
-    syncOptions:
-      - CreateNamespace=true
-      - Validate=true
-      - ServerSideApply=true
-      - PruneLast=true       # if pruning is manually triggered, do it AFTER all creates/updates
-    retry:
-      limit: 2               # fewer retries in prod — failures need human eyes sooner
-      backoff:
-        duration: 30s
-        factor: 2
-        maxDuration: 10m
 
+    syncOptions:
+      # Create the namespace if it doesn't exist yet
+      - CreateNamespace=true
+
+      # Validate resources against Kubernetes API
+      - Validate=true
+
+      # Use server-side apply for better field management
+      - ServerSideApply=true
+
+      # If pruning is manually triggered, do it AFTER all creates/updates
+      - PruneLast=true
+
+      # Apply only resources that have changed (faster syncs)
+      - ApplyOutOfSyncOnly=true
+
+      # Respect PodDisruptionBudgets during operations
+      - RespectIgnoreDifferences=true
+
+      # Don't prune resources with these annotations
+      - PrunePropagationPolicy=foreground
+
+      # Replace resources instead of patching when needed
+      - Replace=true
+
+    # Retry policy: more conservative in production
+    # Failures need human eyes sooner, so fewer retries with longer backoff
+    retry:
+      limit: 3               # Fewer retries in prod — failures need human eyes sooner
+      backoff:
+        duration: 30s        # Start with 30s
+        factor: 2            # 30s, 60s, 120s
+        maxDuration: 5m
+
+  # ignoreDifferences: Comprehensive for production
+  # Production has more controllers and webhooks that modify resources
   ignoreDifferences:
+    # HPA manages replicas - ignore to prevent fighting with autoscaler
     - group: apps
       kind: Deployment
       jsonPointers:
         - /spec/replicas
+        - /status
+
+    # Ignore status fields that are constantly changing
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/replicas
+        - /status
+
+    - group: apps
+      kind: DaemonSet
+      jsonPointers:
+        - /status
+
+    # Service status and cluster IPs are assigned by Kubernetes
+    - group: ""
+      kind: Service
+      jsonPointers:
+        - /spec/clusterIP
+        - /spec/clusterIPs
+        - /status
+
+    # Ingress status gets updated by ingress controller
+    - group: networking.k8s.io
+      kind: Ingress
+      jsonPointers:
+        - /status
+
+    # HPA metrics can be complex - ignore specific paths
     - group: autoscaling
       kind: HorizontalPodAutoscaler
       jqPathExpressions:
         - .spec.metrics
+        - .status
+
+    # Webhook configurations get CA bundles injected
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jsonPointers:
+        - /webhooks/0/clientConfig/caBundle
+        - /webhooks/0/timeoutSeconds
+
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jsonPointers:
+        - /webhooks/0/clientConfig/caBundle
+        - /webhooks/0/timeoutSeconds
+
+    # Pod specs may get mutated by admission controllers
+    - group: ""
+      kind: Pod
+      jsonPointers:
+        - /spec/containers/0/resources
+        - /spec/containers/0/securityContext
+
+    # ServiceMonitors might get updated by Prometheus operator
+    - group: monitoring.coreos.com
+      kind: ServiceMonitor
+      jsonPointers:
+        - /status
+
+  # Add revision history limit to control number of rolled-back revisions stored
+  revisionHistoryLimit: 5  # Fewer in prod for security
+
+  # Add info field for additional metadata visible in ArgoCD UI
+  info:
+    - name: "Repository"
+      value: "https://github.com/Prime-victor/GitOps_Configuration_Manager"
+    - name: "Chart"
+      value: "hello-world"
+    - name: "Environment"
+      value: "production"
+    - name: "Team"
+      value: "platform"
+    - name: "SLI"
+      value: "https://internal-grafana.company.com/d/prod-hello-world"
+    - name: "Runbook"
+      value: "https://internal.wiki/runbooks/prod-hello-world"
+    - name: "On-call"
+      value: "platform-team@pagerduty.com"
+
+  # Add sync windows reference (actual windows defined in AppProject)
+  syncWindows:
+    - kind: "deny"
+      schedule: "0 0 * * 6,0"  # Deny syncs on weekends (Sat 00:00 - Mon 00:00)
+      duration: "48h"
+      applications:
+        - "prod-*"
+      namespaces:
+        - "prod"
+      clusters:
+        - "in-cluster"
+      manualSync: false  # Even manual syncs blocked during freeze
