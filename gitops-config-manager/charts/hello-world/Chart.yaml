@@ -1,4 +1,3 @@
-# charts/hello-world/Chart.yaml
 # Chart metadata. Every field here is meaningful:
 # - 'version' is the chart version — bump this when you change chart structure
 # - 'appVersion' is the version of the APPLICATION the chart deploys

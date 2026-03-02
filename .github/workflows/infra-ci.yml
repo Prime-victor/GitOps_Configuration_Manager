@@ -1,0 +1,207 @@
+name: Infrastructure CI
+
+on:
+  pull_request:
+    branches: [ main, staging ]
+    paths:
+      - 'charts/**'
+      - 'environments/**'
+      - 'apps/**'
+      - 'argocd/**'
+  push:
+    branches: [ main ]
+    paths:
+      - 'charts/**'
+      - 'environments/**'
+
+env:
+  KUBE_VERSION: v1.28.0
+  KIND_VERSION: v0.20.0
+
+jobs:
+  validate-helm:
+    name: Validate Helm Charts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.12.0
+
+      - name: Lint Helm Charts
+        run: |
+          for chart in charts/*/; do
+            echo "Linting $chart"
+            helm lint $chart
+          done
+
+      - name: Template Validation
+        run: |
+          # Test templating with different environments
+          helm template charts/hello-world/ --values environments/dev/values.yaml > /dev/null
+          helm template charts/hello-world/ --values environments/staging/values.yaml > /dev/null
+          helm template charts/hello-world/ --values environments/prod/values.yaml > /dev/null
+
+  validate-manifests:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBE_VERSION }}
+
+      - name: Validate ArgoCD Applications
+        run: |
+          # Basic YAML validation
+          for file in apps/*.yaml argocd/**/*.yaml; do
+            if [ -f "$file" ]; then
+              echo "Validating $file"
+              kubectl apply --dry-run=client -f "$file" || exit 1
+            fi
+          done
+
+  k8s-compatibility:
+    name: Kubernetes Compatibility Test
+    runs-on: ubuntu-latest
+    needs: [validate-helm, validate-manifests]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create Kind Cluster
+        uses: helm/kind-action@v1.8.0
+        with:
+          version: ${{ env.KIND_VERSION }}
+          cluster_name: gitops-ci
+          config: kind-config.yaml
+
+      - name: Install Helm Charts
+        run: |
+          # Install in CI cluster to verify
+          helm install test-release charts/hello-world/ \
+            --values environments/dev/values.yaml \
+            --wait \
+            --timeout 2m
+
+      - name: Verify Deployments
+        run: |
+          kubectl get pods -A
+          kubectl get services -A
+          
+          # Wait for deployment to be ready
+          kubectl wait --for=condition=available deployment \
+            --all --all-namespaces --timeout=60s
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Scan Helm Charts
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: './charts'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+
+  conftest-policies:
+    name: Policy Validation (Conftest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Conftest
+        run: |
+          wget https://github.com/open-policy-agent/conftest/releases/download/v0.46.0/conftest_0.46.0_Linux_x86_64.tar.gz
+          tar xzf conftest_0.46.0_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin
+
+      - name: Create OPA Policies
+        run: |
+          mkdir -p policy
+          cat > policy/require_labels.rego <<'EOF'
+          package main
+
+          deny[msg] {
+            input.kind == "Deployment"
+            not input.metadata.labels
+            msg = "Deployment must have labels"
+          }
+
+          deny[msg] {
+            input.kind == "Deployment"
+            input.spec.replicas < 2
+            input.metadata.namespace == "prod"
+            msg = "Production deployments must have at least 2 replicas"
+          }
+          EOF
+
+      - name: Test Policies
+        run: |
+          # Test generated manifests against policies
+          helm template charts/hello-world/ --values environments/prod/values.yaml | \
+            conftest test --policy policy/ -
+
+  notify-status:
+    name: Notify Status
+    runs-on: ubuntu-latest
+    needs: [validate-helm, validate-manifests, k8s-compatibility, security-scan, conftest-policies]
+    if: always()
+    steps:
+      - name: Slack Notification
+        if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": " CI Pipeline Failed: ${{ github.repository }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*GitOps Config Manager*\n Pipeline failed on PR #${{ github.event.pull_request.number }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repository:*\n${{ github.repository }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.head_ref || github.ref_name }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Run :github:"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
