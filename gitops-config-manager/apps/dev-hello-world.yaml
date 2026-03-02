@@ -19,6 +19,8 @@ metadata:
     environment: dev
     team: platform
     app: hello-world
+    managed-by: argocd
+    tier: application
 
   # The resources-finalizer is critical.
   # Without it: deleting this Application manifest leaves all the Kubernetes
@@ -31,8 +33,15 @@ metadata:
   annotations:
     # Document the purpose and owner in annotations — searchable in the UI
     argocd.argoproj.io/sync-wave: "1"   # sync order within a wave (Phase 9)
-    notifications.argoproj.io/subscribe.on-sync-failed.slack: "platform-alerts"
-    notifications.argoproj.io/subscribe.on-health-degraded.slack: "platform-alerts"
+    argocd.argoproj.io/manifest-generate-paths: "."
+    
+    # Discord notifications
+    notifications.argoproj.io/subscribe.on-sync-failed.webhook-discord: "platform"
+    notifications.argoproj.io/subscribe.on-sync-succeeded.webhook-discord: "platform"
+    notifications.argoproj.io/subscribe.on-health-degraded.webhook-discord: "platform"
+    notifications.argoproj.io/subscribe.on-deployed.webhook-discord: "platform"
+    notifications.argoproj.io/subscribe.on-out-of-sync.webhook-discord: "platform"
+    
 
 spec:
   # Must match an AppProject name. Restricts what this app can do.
@@ -67,6 +76,10 @@ spec:
       # (e.g., values generated at sync time, or secrets references).
       # Keep this empty where possible — values in files are reviewable in Git.
       values: ""
+
+      # Additional Helm settings for better control
+      skipCrds: false  # Set to true if you manage CRDs separately
+      ignoreMissingValueFiles: false  # Fail if value files are missing
 
   destination:
     # The cluster to deploy to. 'kubernetes.default.svc' = in-cluster.
@@ -109,6 +122,12 @@ spec:
       # Won't delete a pod if it would violate the PDB.
       - RespectIgnoreDifferences=true
 
+      # Apply only resources that have changed (faster syncs)
+      - ApplyOutOfSyncOnly=true
+
+      # Prune last to maintain dependencies
+      - PruneLast=true
+
     # Retry policy: if a sync fails, retry with exponential backoff.
     # This handles transient errors (network blip, webhook timeout, etc.)
     # without paging the on-call engineer at 2am for a 5-second outage.
@@ -134,3 +153,34 @@ spec:
       kind: MutatingWebhookConfiguration
       jsonPointers:
         - /webhooks/0/clientConfig/caBundle
+
+    # Additional common ignore differences
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/template/metadata/annotations
+        - /status
+
+    - group: ""
+      kind: Service
+      jsonPointers:
+        - /status
+
+    - group: networking.k8s.io
+      kind: Ingress
+      jsonPointers:
+        - /status
+
+  # Add revision history limit to control number of rolled-back revisions stored
+  revisionHistoryLimit: 10
+
+  # Add info field for additional metadata
+  info:
+    - name: "Repository"
+      value: "https://github.com/Prime-victor/GitOps_Configuration_Manager"
+    - name: "Chart"
+      value: "hello-world"
+    - name: "Environment"
+      value: "dev"
+    - name: "Team"
+      value: "platform"
