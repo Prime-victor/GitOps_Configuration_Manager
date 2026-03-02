@@ -63,7 +63,8 @@ jobs:
           for file in gitops-config-manager/apps/*.yaml gitops-config-manager/argocd/**/*.yaml; do
             if [ -f "$file" ]; then
               echo "Validating $file"
-              kubectl apply --dry-run=client -f "$file" || exit 1
+              # CI runners do not have Argo CRDs installed, so disable schema validation.
+              kubectl apply --dry-run=client --validate=false -f "$file" || exit 1
             fi
           done
 
