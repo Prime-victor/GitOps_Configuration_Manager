@@ -36,11 +36,11 @@ metadata:
     argocd.argoproj.io/manifest-generate-paths: "."
     
     # Discord notifications
-    notifications.argoproj.io/subscribe.on-sync-failed.webhook-discord: "platform"
-    notifications.argoproj.io/subscribe.on-sync-succeeded.webhook-discord: "platform"
-    notifications.argoproj.io/subscribe.on-health-degraded.webhook-discord: "platform"
-    notifications.argoproj.io/subscribe.on-deployed.webhook-discord: "platform"
-    notifications.argoproj.io/subscribe.on-out-of-sync.webhook-discord: "platform"
+    notifications.argoproj.io/subscribe.on-sync-failed.discord: "platform"
+    notifications.argoproj.io/subscribe.on-sync-succeeded.discord: "platform"
+    notifications.argoproj.io/subscribe.on-health-degraded.discord: "platform"
+    notifications.argoproj.io/subscribe.on-deployed.discord: "platform"
+    notifications.argoproj.io/subscribe.on-out-of-sync.discord: "platform"
     
 
 spec:

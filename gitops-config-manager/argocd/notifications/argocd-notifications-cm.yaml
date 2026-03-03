@@ -11,6 +11,9 @@ data:
   # ── Discord Service Definition  ──────────────────────────
   service.webhook.discord: |
     url: $discord-webhook-url
+    headers:
+      - name: Content-Type
+        value: application/json
 
   # ── Notification Templates ─────────────────────────────────────────────────
 
@@ -18,6 +21,9 @@ data:
     webhook:
       discord:
         method: POST
+        headers:
+          - name: Content-Type
+            value: application/json
         body: |
           {
             "username": "ArgoCD",
@@ -58,6 +64,9 @@ data:
     webhook:
       discord:
         method: POST
+        headers:
+          - name: Content-Type
+            value: application/json
         body: |
           {
             "username": "ArgoCD",
@@ -105,6 +114,116 @@ data:
       oncePer: app.status.health.status
       send:
         - discord-health-degraded
+
+  template.discord-sync-succeeded: |
+    webhook:
+      discord:
+        method: POST
+        headers:
+          - name: Content-Type
+            value: application/json
+        body: |
+          {
+            "username": "ArgoCD",
+            "embeds": [
+              {
+                "title": "Sync Succeeded: {{.app.metadata.name}}",
+                "color": 3066993,
+                "url": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}"
+              }
+            ]
+          }
+
+  template.discord-sync-running: |
+    webhook:
+      discord:
+        method: POST
+        headers:
+          - name: Content-Type
+            value: application/json
+        body: |
+          {
+            "username": "ArgoCD",
+            "embeds": [
+              {
+                "title": "Sync Running: {{.app.metadata.name}}",
+                "color": 3447003,
+                "url": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}"
+              }
+            ]
+          }
+
+  template.discord-out-of-sync: |
+    webhook:
+      discord:
+        method: POST
+        headers:
+          - name: Content-Type
+            value: application/json
+        body: |
+          {
+            "username": "ArgoCD",
+            "embeds": [
+              {
+                "title": "OutOfSync: {{.app.metadata.name}}",
+                "color": 15105570,
+                "url": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}"
+              }
+            ]
+          }
+
+  template.discord-sync-unknown: |
+    webhook:
+      discord:
+        method: POST
+        headers:
+          - name: Content-Type
+            value: application/json
+        body: |
+          {
+            "username": "ArgoCD",
+            "embeds": [
+              {
+                "title": "Sync Unknown: {{.app.metadata.name}}",
+                "color": 9807270,
+                "url": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}"
+              }
+            ]
+          }
+
+  trigger.on-sync-succeeded: |
+    - description: Notify when application sync succeeds
+      when: app.status.operationState.phase in ['Succeeded']
+      oncePer: app.status.sync.revision
+      send:
+        - discord-sync-succeeded
+
+  trigger.on-sync-running: |
+    - description: Notify when application sync is running
+      when: app.status.operationState.phase in ['Running']
+      send:
+        - discord-sync-running
+
+  trigger.on-out-of-sync: |
+    - description: Notify when application is out of sync
+      when: app.status.sync.status == 'OutOfSync'
+      oncePer: app.status.sync.revision
+      send:
+        - discord-out-of-sync
+
+  trigger.on-sync-status-unknown: |
+    - description: Notify when sync status is unknown
+      when: app.status.sync.status == 'Unknown'
+      oncePer: app.status.sync.status
+      send:
+        - discord-sync-unknown
+
+  trigger.on-deployed: |
+    - description: Notify on deployment completion
+      when: app.status.operationState.phase in ['Succeeded']
+      oncePer: app.status.sync.revision
+      send:
+        - discord-sync-succeeded
 
   # ── Context Variables ──────────────────────────────────────────────────────
 

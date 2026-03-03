@@ -35,13 +35,13 @@ metadata:
     # Production alerts go to dedicated channels — higher urgency
     
     # Discord notifications - same pattern, all to production channel
-    notifications.argoproj.io/subscribe.on-sync-failed.webhook-discord: "prod"
-    notifications.argoproj.io/subscribe.on-sync-succeeded.webhook-discord: "prod"
-    notifications.argoproj.io/subscribe.on-sync-running.webhook-discord: "prod"
-    notifications.argoproj.io/subscribe.on-health-degraded.webhook-discord: "prod"
-    notifications.argoproj.io/subscribe.on-deployed.webhook-discord: "prod"
-    notifications.argoproj.io/subscribe.on-out-of-sync.webhook-discord: "prod"
-    notifications.argoproj.io/subscribe.on-sync-status-unknown.webhook-discord: "prod"
+    notifications.argoproj.io/subscribe.on-sync-failed.discord: "prod"
+    notifications.argoproj.io/subscribe.on-sync-succeeded.discord: "prod"
+    notifications.argoproj.io/subscribe.on-sync-running.discord: "prod"
+    notifications.argoproj.io/subscribe.on-health-degraded.discord: "prod"
+    notifications.argoproj.io/subscribe.on-deployed.discord: "prod"
+    notifications.argoproj.io/subscribe.on-out-of-sync.discord: "prod"
+    notifications.argoproj.io/subscribe.on-sync-status-unknown.discord: "prod"
     
     # Additional production-specific metadata
     pagerduty.com/severity: "critical"          # For PagerDuty integration
