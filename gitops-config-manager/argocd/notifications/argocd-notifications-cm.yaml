@@ -9,14 +9,14 @@ metadata:
 data:
 
   # ── Discord Service Definition  ──────────────────────────
-  service.webhook-discord: |
+  service.webhook.discord: |
     url: $discord-webhook-url
 
   # ── Notification Templates ─────────────────────────────────────────────────
 
   template.discord-sync-failed: |
     webhook:
-      webhook-discord:
+      discord:
         method: POST
         body: |
           {
@@ -56,7 +56,7 @@ data:
 
   template.discord-health-degraded: |
     webhook:
-      webhook-discord:
+      discord:
         method: POST
         body: |
           {
