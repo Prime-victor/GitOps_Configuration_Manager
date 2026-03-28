@@ -1,0 +1,170 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 220 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    --primary: 220 70% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 92%;
+    --secondary-foreground: 220 25% 15%;
+
+    --muted: 220 15% 94%;
+    --muted-foreground: 220 10% 45%;
+
+    --accent: 220 15% 90%;
+    --accent-foreground: 220 25% 15%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 220 70% 50%;
+
+    --radius: 0.625rem;
+
+    /* Status colors */
+    --status-healthy: 152 60% 42%;
+    --status-healthy-bg: 152 60% 95%;
+    --status-progressing: 38 92% 50%;
+    --status-progressing-bg: 38 92% 95%;
+    --status-degraded: 0 72% 51%;
+    --status-degraded-bg: 0 72% 96%;
+    --status-synced: 220 70% 50%;
+    --status-synced-bg: 220 70% 96%;
+    --status-outofsync: 25 95% 53%;
+    --status-outofsync-bg: 25 95% 96%;
+    --status-unknown: 220 10% 50%;
+    --status-unknown-bg: 220 10% 95%;
+    --status-missing: 280 60% 50%;
+    --status-missing-bg: 280 60% 96%;
+
+    /* Surfaces */
+    --surface-raised: 0 0% 100%;
+    --surface-overlay: 220 20% 98%;
+    --surface-mesh: 220 30% 96%;
+
+    /* Sidebar */
+    --sidebar-background: 222 30% 12%;
+    --sidebar-foreground: 220 15% 75%;
+    --sidebar-primary: 220 70% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 25% 18%;
+    --sidebar-accent-foreground: 220 15% 90%;
+    --sidebar-border: 222 20% 20%;
+    --sidebar-ring: 220 70% 55%;
+
+    /* KPI */
+    --kpi-gradient-start: 220 70% 50%;
+    --kpi-gradient-end: 250 60% 55%;
+  }
+
+  .dark {
+    --background: 222 30% 8%;
+    --foreground: 220 15% 90%;
+    --card: 222 25% 12%;
+    --card-foreground: 220 15% 90%;
+    --popover: 222 25% 12%;
+    --popover-foreground: 220 15% 90%;
+    --primary: 220 70% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 20% 18%;
+    --secondary-foreground: 220 15% 85%;
+    --muted: 222 20% 16%;
+    --muted-foreground: 220 10% 55%;
+    --accent: 222 20% 18%;
+    --accent-foreground: 220 15% 85%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 222 20% 20%;
+    --input: 222 20% 20%;
+    --ring: 220 70% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', system-ui, sans-serif;
+    @apply font-semibold tracking-tight;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .bg-mesh {
+    background-image:
+      radial-gradient(at 20% 20%, hsl(220 70% 50% / 0.04) 0px, transparent 50%),
+      radial-gradient(at 80% 80%, hsl(250 60% 55% / 0.04) 0px, transparent 50%),
+      radial-gradient(at 50% 0%, hsl(220 30% 96%) 0px, transparent 70%);
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(hsl(220 15% 88% / 0.5) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(220 15% 88% / 0.5) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-sm border border-border/60 shadow-sm;
+  }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out both;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.35s ease-out both;
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
